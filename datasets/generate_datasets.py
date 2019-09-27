@@ -92,11 +92,11 @@ class DatasetGenerator(object):
         if reached_up and not reached_down:
             target = 1
         elif reached_down and not reached_up:
-            target = -1
-        elif reached_up and reached_down:
-            target = None
-        elif not reached_up and not reached_down:
             target = 0
+        elif reached_up and reached_down:
+            target = 9999
+        elif not reached_up and not reached_down:
+            target = None
 
         # Variables need to be made into lists otherwise pandas wants an index
         return pd.DataFrame({"Target": [target], "TargetDelay": [target_delay]})
