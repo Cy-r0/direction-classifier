@@ -1,6 +1,7 @@
 import os
 
 import torch
+import torch.optim 
 from torch.utils.data import DataLoader, Subset
 import torchvision.transforms as T
 
@@ -80,7 +81,28 @@ class ConfigModel(object):
     def __init__(self, model):
         if model == "SimpleCNN":
             self.model = models.SimpleCNN
+        else:
+            raise ValueError("The specified model is not implemented (yet)")
             
+
+class ConfigOptimiser(object):
+    """
+    Configures the optimiser used to train the network.
+    """
+
+    def __init__(self, model_params, optimiser, **kwargs):
+        if optimiser == "SGD":
+            self.optimiser = torch.optim.SGD(
+                model_params,
+                lr=kwargs["lr"],
+                momentum=kwargs["momentum"],
+                dampening=kwargs["dampening"],
+                weight_decay=kwargs["weight_decay"],
+                nesterov=kwargs["nesterov"])
+        else:
+            raise ValueError("The specified optimiser is not implemented (yet)")
+
+
 
 
 if __name__ == "__main__":
