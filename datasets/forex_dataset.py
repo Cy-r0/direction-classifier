@@ -42,6 +42,9 @@ class ForexDataset(Dataset):
             datapoint = self.transforms(datapoint)
 
         return datapoint
+    
+    def __len__(self):
+        return len(self.samples)
 
 
 

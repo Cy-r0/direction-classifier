@@ -1,1 +1,1 @@
-import forex_dataset
+from .forex_dataset import ForexDataset
