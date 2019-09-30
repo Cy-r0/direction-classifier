@@ -76,11 +76,14 @@ class ConfigModel(object):
     Class that configures model, choosing from a model zoo.
     Args:
         model (string): name of model to use.
+        output_classes (int): number of output classes.
     """
 
-    def __init__(self, model):
+    def __init__(self, model, input_features, output_classes):
         if model == "SimpleCNN":
-            self.model = models.SimpleCNN
+            self.model = models.SimpleCNN(
+                input_features=input_features,
+                output_classes=output_classes)
         else:
             raise ValueError("The specified model is not implemented (yet)")
             
@@ -88,9 +91,17 @@ class ConfigModel(object):
 class ConfigOptimiser(object):
     """
     Configures the optimiser used to train the network.
+    Args:
+        model_params (iterable): parameters of model to optimise.
+        optimiser (string): name of optimiser.
+        weight_decay (int): L2 weight penalty.
+        **kwargs: parameters of optimiser, depend on which optimiser is used.
     """
 
-    def __init__(self, model_params, optimiser, **kwargs):
+    def __init__(self,
+        model_params,
+        optimiser,
+        **kwargs):
         if optimiser == "SGD":
             self.optimiser = torch.optim.SGD(
                 model_params,
