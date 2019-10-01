@@ -5,7 +5,7 @@ import torch.optim
 from torch.utils.data import DataLoader, Subset
 import torchvision.transforms as T
 
-from datasets import ForexDataset
+from datasets import DCDataset
 import models
 import transforms as myT
 
@@ -18,35 +18,38 @@ class ConfigDataset(object):
         batch_size (int).
         n_workers (int): number of workers for dataloaders.
         transforms (callable): transforms to apply to each datapoint.
-        train_idx (sequence): indices of dataset samples to be used for training.
-        val_idx (sequence): indices for validation.
-        test_idx (sequence): indices for testing.
     """
 
     def __init__(self,
         symbol,
         batch_size,
         n_workers=8,
-        transforms=None,
-        train_idx=None,
-        val_idx=None,
-        test_idx=None,):
+        transforms=None):
 
         self.symbol = symbol
         self.batch_size = batch_size
+        self.n_workers = n_workers
 
         root = os.path.join("datasets", "prepared_data", symbol)
         assert os.path.exists(root), \
             "dataset root not found, are you sure it exists for this symbol?"
-        self.dataset = ForexDataset(root, transforms=transforms)
+        self.dataset = DCDataset(root, transforms=transforms)
 
+    def split(self, train_idx, val_idx, test_idx):
+        """
+        Split dataset into training, validation and test sets.
+        Args:
+            train_idx (sequence): indices of dataset samples for training.
+            val_idx (sequence): indices for validation.
+            test_idx (sequence): indices for testing.
+        """
         if train_idx:
             self.train_set = Subset(self.dataset, train_idx)
             self.train_loader = DataLoader(
                 self.train_set,
-                batch_size=batch_size,
+                batch_size=self.batch_size,
                 shuffle=True,
-                num_workers=n_workers,
+                num_workers=self.n_workers,
                 pin_memory=True,
                 drop_last=True)
 
@@ -54,9 +57,9 @@ class ConfigDataset(object):
             self.val_set = Subset(self.dataset, val_idx)
             self.val_loader = DataLoader(
                 self.val_set,
-                batch_size=batch_size,
+                batch_size=self.batch_size,
                 shuffle=True,
-                num_workers=n_workers,
+                num_workers=self.n_workers,
                 pin_memory=True,
                 drop_last=True)
 
@@ -80,7 +83,11 @@ class ConfigModel(object):
     """
 
     def __init__(self, model, input_features, output_classes):
-        if model == "SimpleCNN":
+        if model == "MLP":
+            self.model = models.MLP(
+                input_features=input_features,
+                output_classes=output_classes)
+        elif model == "SimpleCNN":
             self.model = models.SimpleCNN(
                 input_features=input_features,
                 output_classes=output_classes)
@@ -132,5 +139,5 @@ if __name__ == "__main__":
         print(datapoint)
     print(len(c.test_loader))
 
-    model = ConfigModel("SimpleCNN").model
+    model = ConfigModel("SimpleCNN", 5, 2).model
 
