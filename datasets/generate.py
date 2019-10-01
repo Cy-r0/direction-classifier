@@ -38,6 +38,7 @@ class DCDatasetGenerator(object):
         
         self.data = pd.read_csv(datafile)
         self.data_len = len(self.data)
+        self.prepared_data_len = len(self.data) - past_timesteps
 
         self.past_timesteps = past_timesteps
         assert past_timesteps > 0, "number of past timesteps is not > 0"
@@ -60,50 +61,6 @@ class DCDatasetGenerator(object):
         self.log_stats()
 
 
-    def log_stats(self):
-        """
-        Log dataset statistics.
-        NOTE: requires dataset samples to be already extracted.
-        """
-        log_path = os.path.join(self.root, "stats.txt")
-        with open(log_path, "w") as f:
-            print("%d/%d (%f %%) datapoints discarded because both top and " \
-                "bottom targets are reached in the same hour."
-                %(
-                    self.targetcount_both,
-                    self.data_len,
-                    self.targetcount_both / self.data_len * 100),
-                file=f)
-            print("%d/%d (%f %%) datapoints discarded because neither target " \
-                "is reached by the end of the dataset."
-                %(
-                    self.targetcount_none, 
-                    self.data_len, 
-                    self.targetcount_none / self.data_len * 100),
-                file=f)
-            total_valid_points = self.targetcount_high + self.targetcount_low
-            print("%d/%d (%f %%) datapoints with a high target, reached after " \
-                "%.2f hours on average (%d max, %d min)."
-                %(
-                    self.targetcount_high,
-                    total_valid_points,
-                    self.targetcount_high / total_valid_points * 100,
-                    self.mean_targetdelay_high,
-                    self.max_targetdelay_high,
-                    self.min_targetdelay_high),
-                file=f)
-            print("%d/%d (%f %%) datapoints with a low target, reached after " \
-                "%.2f hours on average (%d max, %d min)."
-                %(
-                    self.targetcount_low, 
-                    total_valid_points, 
-                    self.targetcount_low / total_valid_points * 100,
-                    self.mean_targetdelay_low,
-                    self.max_targetdelay_low,
-                    self.min_targetdelay_low),
-                file=f)
-
-
     def extract_samples(self):
         """
         Create data samples, find targets, and write both to csv.
@@ -111,9 +68,36 @@ class DCDatasetGenerator(object):
         for s in tqdm(range(self.past_timesteps, self.data_len)):
             sample = self.data[s - self.past_timesteps:s]
             target = self._find_target(s)
-
-            # Ignore this datapoint if target is invalid
+            
+            # Accumulate stats
             target_value = target.at[0, "Target"]
+            target_delay = target.at[0, "TargetDelay"]
+
+            if target_value == 1:
+                self.targetcount_high += 1
+                self.mean_targetdelay_high += target_delay
+                # Update min and max target delay
+                if target_delay > self.max_targetdelay_high:
+                    self.max_targetdelay_high = target_delay
+                if target_delay < self.min_targetdelay_high:
+                    self.min_targetdelay_high = target_delay
+
+            elif target_value == 0:
+                self.targetcount_low += 1
+                self.mean_targetdelay_low += target_delay
+                # Update min and max target delay
+                if target_delay > self.max_targetdelay_low:
+                    self.max_targetdelay_low = target_delay
+                if target_delay < self.min_targetdelay_low:
+                    self.min_targetdelay_low = target_delay
+            
+            elif target_value == 2:
+                self.targetcount_both += 1
+            
+            elif target_value == None:
+                self.targetcount_none += 1
+
+            # Dont write to csv if target is invalid
             if target_value != 0 and target_value != 1:
                 continue
             else:
@@ -165,29 +149,12 @@ class DCDatasetGenerator(object):
         
         if reached_up and not reached_down:
             target = 1
-            # Accumulate stats
-            self.targetcount_high += 1
-            self.mean_targetdelay_high += target_delay
-            # Update min and max target delay
-            if target_delay > self.max_targetdelay_high:
-                self.max_targetdelay_high = target_delay
-            if target_delay < self.min_targetdelay_high:
-                self.min_targetdelay_high = target_delay
         elif reached_down and not reached_up:
             target = 0
-            self.targetcount_low += 1
-            self.mean_targetdelay_low += target_delay
-            # Update min and max target delay
-            if target_delay > self.max_targetdelay_low:
-                self.max_targetdelay_low = target_delay
-            if target_delay < self.min_targetdelay_low:
-                self.min_targetdelay_low = target_delay
         elif reached_up and reached_down:
             target = 2
-            self.targetcount_both += 1
         elif not reached_up and not reached_down:
             target = None
-            self.targetcount_none += 1
 
         # Variables need to be made into lists otherwise pandas wants an index
         return pd.DataFrame({"Target": [target], "TargetDelay": [target_delay]})
@@ -219,6 +186,52 @@ class DCDatasetGenerator(object):
         (not implemented).
         """
         pass
+
+    def log_stats(self):
+        """
+        Log dataset statistics.
+        NOTE: requires dataset samples to be already extracted.
+        """
+        log_path = os.path.join(self.root, "stats.txt")
+        with open(log_path, "w") as f:
+            print("Past timesteps: %d" %(self.past_timesteps), file=f)
+            print("Target delta (fraction of starting price): %f" 
+                %(self.target_delta), file=f)
+            print("%d/%d (%f %%) datapoints discarded because both top and " \
+                "bottom targets are reached in the same hour."
+                %(
+                    self.targetcount_both,
+                    self.prepared_data_len,
+                    self.targetcount_both / self.prepared_data_len * 100),
+                file=f)
+            print("%d/%d (%f %%) datapoints discarded because neither target " \
+                "is reached by the end of the dataset."
+                %(
+                    self.targetcount_none, 
+                    self.prepared_data_len, 
+                    self.targetcount_none / self.prepared_data_len * 100),
+                file=f)
+            total_valid_points = self.targetcount_high + self.targetcount_low
+            print("%d/%d (%f %%) datapoints with a high target, reached after " \
+                "%.2f hours on average (%d max, %d min)."
+                %(
+                    self.targetcount_high,
+                    total_valid_points,
+                    self.targetcount_high / total_valid_points * 100,
+                    self.mean_targetdelay_high,
+                    self.max_targetdelay_high,
+                    self.min_targetdelay_high),
+                file=f)
+            print("%d/%d (%f %%) datapoints with a low target, reached after " \
+                "%.2f hours on average (%d max, %d min)."
+                %(
+                    self.targetcount_low, 
+                    total_valid_points, 
+                    self.targetcount_low / total_valid_points * 100,
+                    self.mean_targetdelay_low,
+                    self.max_targetdelay_low,
+                    self.min_targetdelay_low),
+                file=f)
 
 
 
