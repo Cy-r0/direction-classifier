@@ -163,8 +163,8 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum):
     val_conf = normalise_conf(val_conf)
     train_conf_fig = conf2fig(train_conf)
     val_conf_fig = conf2fig(val_conf)
-    logger.add_figure("train confusion normalised", train_conf, epoch)
-    logger.add_figure("val confusion normalised", val_conf, epoch)
+    logger.add_figure("train confusion normalised", train_conf_fig, epoch)
+    logger.add_figure("val confusion normalised", val_conf_fig, epoch)
 
     logger.close()
 
