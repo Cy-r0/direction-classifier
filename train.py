@@ -24,14 +24,18 @@ def calc_conf(predictions, targets):
     conf = confusion_matrix(targets, predictions)
     return conf
 
-def conf2fig(conf):
+def conf2fig(conf, fmt):
     """
     Convert confusion matrix to matplotlib figure.
     """
     fig = plt.figure(figsize=(5,4))
     sn.heatmap(
         pd.DataFrame(conf),
-        annot=True)
+        annot=True,
+        annot_kws={"size": 20},
+        fmt=fmt,
+        xticklabels=["0", "1"],
+        yticklabels=["0", "1"])
     plt.ylabel("True")
     plt.xlabel("Predicted")
 
@@ -114,7 +118,6 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum):
         
         # Normalise by number of batches
         train_loss /= len(train_loader)
-        train_conf /= len(train_loader)
 
         # -------------------
         # VAL LOOP
@@ -137,7 +140,6 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum):
         
         # Normalise by number of batches
         val_loss /= len(val_loader)
-        val_conf /= len(val_loader)
 
         # Log scalars on tensorboard
         logger.add_scalars("losses", {"train": train_loss, "val": val_loss},
@@ -153,16 +155,16 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum):
             %(epoch + 1, epochs, train_loss, val_loss, train_acc, val_acc))
     
     # Convert confusion matrices to figures and log them
-    train_conf_fig = conf2fig(train_conf)
-    val_conf_fig = conf2fig(val_conf)
+    train_conf_fig = conf2fig(train_conf, fmt="0.0f")
+    val_conf_fig = conf2fig(val_conf, fmt="0.0f")
     logger.add_figure("train confusion", train_conf_fig, epoch)
     logger.add_figure("val confusion", val_conf_fig, epoch)
 
     # Normalise confusion matrices and log them again
     train_conf = normalise_conf(train_conf)
     val_conf = normalise_conf(val_conf)
-    train_conf_fig = conf2fig(train_conf)
-    val_conf_fig = conf2fig(val_conf)
+    train_conf_fig = conf2fig(train_conf, fmt="0.3f")
+    val_conf_fig = conf2fig(val_conf, fmt="0.3f")
     logger.add_figure("train confusion normalised", train_conf_fig, epoch)
     logger.add_figure("val confusion normalised", val_conf_fig, epoch)
 
@@ -209,7 +211,7 @@ if __name__ == "__main__":
         model,
         train_loader,
         val_loader,
-        epochs=3, 
+        epochs=1, 
         batch_size=batch_size,
-        lr=0.01, 
+        lr=0.001, 
         momentum=0.9)
