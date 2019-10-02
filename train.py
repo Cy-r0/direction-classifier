@@ -1,3 +1,4 @@
+import argparse
 import warnings
 
 import matplotlib.pyplot as plt
@@ -58,7 +59,7 @@ def normalise_conf(conf):
     return conf_n
 
 
-def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum):
+def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum, log):
     """
     Train model on training set.
     Args:
@@ -69,10 +70,20 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum):
         batch_size (int).
         lr (float): optimiser learning rate.
         momentum (float): optimiser momentum.
+        log (bool): whether to log on tensorboard or not.
     """
+    # Fix random seeds
+    np.random.seed(777)
+    torch.manual_seed(777)
+
+    # Setup gpu
+    device = torch.device("cuda:0")
+    print("Device:", device)
+    
+    model.to(device)
 
     # Initialise optimiser
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.CrossEntropyLoss().to(device)
     optimiser = ConfigOptimiser(
         model.parameters(), 
         "SGD", 
@@ -82,14 +93,18 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum):
         weight_decay=0,
         nesterov=False).optimiser
 
-    logger = SummaryWriter(flush_secs=120)
+    # Initialise tensorboard logger
+    if log:
+        logger = SummaryWriter(flush_secs=120)
 
-    logger.add_graph(model, torch.zeros(32, 5, 240), verbose=False)
+        # Log model architecture (for some reason, a sample input is required)
+        sample_batch = next(iter(train_loader))["sample"].to(device)
+        logger.add_graph(model, sample_batch, verbose=False)
 
-    # Log training hyperparameters
-    hyperparams = "batch_size: %d, lr: %f, momentum: %f" \
-        %(batch_size, lr, momentum)
-    logger.add_text("training hyperparameters", hyperparams)
+        # Log training hyperparameters
+        hyperparams = "batch_size: %d, lr: %f, momentum: %f" \
+            %(batch_size, lr, momentum)
+        logger.add_text("training hyperparameters", hyperparams)
 
     for epoch in range(epochs):
         # Initialise all things to keep track of 
@@ -104,8 +119,9 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum):
         train_loader = tqdm(train_loader, desc="Train", ascii=True)
         model.train()
         for batch in train_loader:
-            sample = batch["sample"]
-            target = batch["target"].long().squeeze() # Crossentropy wants 1d target
+            sample = batch["sample"].to(device)
+            # Squeeze because crossentropy wants 1d target
+            target = batch["target"].long().squeeze().to(device) 
 
             optimiser.zero_grad()
             prediction = model(sample)
@@ -117,7 +133,7 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum):
 
             # Accumulate loss and confusion
             train_loss += loss.item()
-            train_conf += calc_conf(argmax_prediction, target)
+            train_conf += calc_conf(argmax_prediction.cpu(), target.cpu())
         
         # Normalise by number of batches
         train_loss /= len(train_loader)
@@ -129,8 +145,8 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum):
         model.eval()
         with torch.no_grad():
             for batch in val_loader:
-                sample = batch["sample"]
-                target = batch["target"].long().squeeze()
+                sample = batch["sample"].to(device)
+                target = batch["target"].long().squeeze().to(device)
 
                 prediction = model(sample)
 
@@ -139,50 +155,73 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum):
 
                 # Accumulate loss and confusion
                 val_loss += loss.item()
-                val_conf += calc_conf(argmax_prediction, target)
+                val_conf += calc_conf(argmax_prediction.cpu(), target.cpu())
         
         # Normalise by number of batches
         val_loss /= len(val_loader)
 
-        # Log scalars on tensorboard
-        logger.add_scalars("losses", {"train": train_loss, "val": val_loss},
-            epoch)
-        train_acc = np.trace(train_conf) / np.sum(train_conf)
-        val_acc = np.trace(val_conf) / np.sum(val_conf)
-        logger.add_scalars("acc", {"train": train_acc, "val": val_acc},
-            epoch)
-        
-        # Print some info
-        print("Epoch: %d/%d. Train loss: %f, val loss: %f. " \
-            "Train acc: %f, val acc: %f."
-            %(epoch + 1, epochs, train_loss, val_loss, train_acc, val_acc))
+        if log:
+            # Log scalars on tensorboard
+            logger.add_scalars("losses", {"train": train_loss, "val": val_loss},
+                epoch)
+            train_acc = np.trace(train_conf) / np.sum(train_conf)
+            val_acc = np.trace(val_conf) / np.sum(val_conf)
+            logger.add_scalars("acc", {"train": train_acc, "val": val_acc},
+                epoch)
+            
+            # Print some info
+            print("Epoch: %d/%d. Train loss: %f, val loss: %f. " \
+                "Train acc: %f, val acc: %f."
+                %(epoch + 1, epochs, train_loss, val_loss, train_acc, val_acc))
     
-    # Convert confusion matrices to figures and log them
-    train_conf_fig = conf2fig(train_conf, fmt="0.0f")
-    val_conf_fig = conf2fig(val_conf, fmt="0.0f")
-    logger.add_figure("train confusion", train_conf_fig, epoch)
-    logger.add_figure("val confusion", val_conf_fig, epoch)
+    if log:
+        # Convert confusion matrices to figures and log them
+        train_conf_fig = conf2fig(train_conf, fmt="0.0f")
+        val_conf_fig = conf2fig(val_conf, fmt="0.0f")
+        logger.add_figure("train confusion", train_conf_fig, epoch)
+        logger.add_figure("val confusion", val_conf_fig, epoch)
 
-    # Normalise confusion matrices and log them again
-    train_conf = normalise_conf(train_conf)
-    val_conf = normalise_conf(val_conf)
-    train_conf_fig = conf2fig(train_conf, fmt="0.3f")
-    val_conf_fig = conf2fig(val_conf, fmt="0.3f")
-    logger.add_figure("train confusion normalised", train_conf_fig, epoch)
-    logger.add_figure("val confusion normalised", val_conf_fig, epoch)
+        # Normalise confusion matrices and log them again
+        train_conf = normalise_conf(train_conf)
+        val_conf = normalise_conf(val_conf)
+        train_conf_fig = conf2fig(train_conf, fmt="0.3f")
+        val_conf_fig = conf2fig(val_conf, fmt="0.3f")
+        logger.add_figure("train confusion normalised", train_conf_fig, epoch)
+        logger.add_figure("val confusion normalised", val_conf_fig, epoch)
 
-    logger.close()
+        logger.close()
 
 
 if __name__ == "__main__":
 
+    # Parse args
+    parser = argparse.ArgumentParser(description="Train network.")
+    parser.add_argument("--log", type=str, default="n", help="Log on tensorboard?")
+    args = parser.parse_args()
+    logstr = args.log
+    if logstr == "Y" or logstr == "y":
+        log = True
+    elif logstr == "N" or logstr == "n":
+        log = False
+    else:
+        raise ValueError("Command line argument invalid. Choose between y/n.")
+
     # Init transforms
-    in_feat = ["Hour", "Open", "High", "Low", "Close"]
+    in_feat = ["MonthDay", "WeekDay", "Hour", "Open", "High", "Low", "Close"]
     out_feat = ["Target"]
+    mean = pd.DataFrame(
+        [[16., 3., 11.5, "auto", "auto", "auto", "auto"]],
+        columns=in_feat)
+    std = pd.DataFrame(
+        [[8.944272, 1.414214, 6.922187, "auto", "auto", "auto", "auto"]],
+        columns=in_feat)
     transforms = T.Compose([
         myT.SelectFeatures(
             input_features=in_feat,
             output_features=out_feat),
+        myT.Normalise(
+            mean=mean,
+            std=std),
         myT.ToTensor()
     ])
 
@@ -214,7 +253,8 @@ if __name__ == "__main__":
         model,
         train_loader,
         val_loader,
-        epochs=1, 
+        epochs=50, 
         batch_size=batch_size,
         lr=0.001, 
-        momentum=0.0)
+        momentum=0.0,
+        log=False)
