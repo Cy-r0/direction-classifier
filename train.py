@@ -62,7 +62,7 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum):
     """
     Train model on training set.
     Args:
-        model (nn.Module): pytorch model to use.
+        model (torch.nn.Module): pytorch model to use.
         train_loader (DataLoader).
         val_loader (DataLoader).
         epochs (int): number of epochs to train for.
@@ -83,7 +83,10 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum):
         nesterov=False).optimiser
 
     logger = SummaryWriter(flush_secs=120)
-    # TODO log network hyperparams as well
+
+    logger.add_graph(model, torch.zeros(32, 5, 240), verbose=False)
+
+    # Log training hyperparameters
     hyperparams = "batch_size: %d, lr: %f, momentum: %f" \
         %(batch_size, lr, momentum)
     logger.add_text("training hyperparameters", hyperparams)
@@ -214,4 +217,4 @@ if __name__ == "__main__":
         epochs=1, 
         batch_size=batch_size,
         lr=0.001, 
-        momentum=0.9)
+        momentum=0.0)
