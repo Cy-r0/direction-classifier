@@ -69,30 +69,10 @@ class ConfigDataset(object):
                 self.test_set,
                 batch_size=1,
                 shuffle=False,
-                num_workers=1,
+                num_workers=self.n_workers,
                 pin_memory=True,
                 drop_last=False)
 
-
-class ConfigModel(object):
-    """
-    Class that configures model, choosing from a model zoo.
-    Args:
-        model (string): name of model to use.
-        output_classes (int): number of output classes.
-    """
-
-    def __init__(self, model, input_features, output_classes):
-        if model == "MLP":
-            self.model = models.MLP(
-                input_features=input_features,
-                output_classes=output_classes)
-        elif model == "SimpleCNN":
-            self.model = models.SimpleCNN(
-                input_features=input_features,
-                output_classes=output_classes)
-        else:
-            raise ValueError("The specified model is not implemented (yet)")
             
 
 class ConfigOptimiser(object):
