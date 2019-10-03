@@ -24,8 +24,10 @@ class DCDataset(Dataset):
         
         assert os.path.isdir(root), "Dataset root not found"
 
-        self.samples = os.listdir(self.sample_dir)
-        self.targets = os.listdir(self.target_dir)
+        # NOTE! these arent guaranteed to be ordered by date
+        # You need to sort them explicitly
+        self.samples = sorted(os.listdir(self.sample_dir))
+        self.targets = sorted(os.listdir(self.target_dir))
 
         assert set(self.samples) == set(self.targets), \
             "Not all samples have a matching target"
@@ -34,15 +36,27 @@ class DCDataset(Dataset):
         sample_path = os.path.join(self.sample_dir, self.samples[index])
         target_path = os.path.join(self.target_dir, self.targets[index])
 
+        datetime = self.samples[index][:-4] # e.g. "2018040122"
+        datetime_dict = {
+            "year": int(datetime[:4]),
+            "month": int(datetime[4:6]),
+            "day": int(datetime[6:8]),
+            "hour": int(datetime[8:])
+        }
         sample = pd.read_csv(sample_path)
         target = pd.read_csv(target_path)
-
+        
         datapoint = {"sample": sample, "target": target}
 
         if self.transforms is not None:
             datapoint = self.transforms(datapoint)
 
-        return datapoint
+        sample = datapoint["sample"]
+        target = datapoint["target"]
+        
+        dated_datapoint = {"datetime": datetime, "sample": sample, "target": target}
+
+        return dated_datapoint
     
     def __len__(self):
         return len(self.samples)
