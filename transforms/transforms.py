@@ -1,3 +1,5 @@
+import numpy as np
+import pandas as pd
 import torch
 
 
@@ -11,6 +13,18 @@ class Normalise(object):
     def __init__(self, mean, std):
         self.mean = mean
         self.std = std
+        
+        # Find columns that dont contain "auto" values in mean and std
+        self.cols_mean = mean.loc[:, mean.loc[0, :]!="auto"].columns
+        self.cols_std = std.loc[:, std.loc[0, :]!="auto"].columns
+        # Also find indices of these columns
+        self.cols_mean_i = [self.mean.columns.get_loc(col) for col in self.cols_mean]
+        self.cols_std_i = [self.std.columns.get_loc(col) for col in self.cols_std]
+        
+        # Convert dataframes to Series
+        self.mean = self.mean.iloc[0, :]
+        self.std = self.std.iloc[0, :]
+
 
     def __call__(self, datapoint):
         sample = datapoint["sample"]
@@ -18,32 +32,19 @@ class Normalise(object):
 
         # Reorder columns in stats to match order of sample
         # Will throw an error if stats dont contain all the headers in sample
-        self.mean = self.mean[sample.columns]
-        self.std = self.std[sample.columns]
+        #self.mean = self.mean[sample.columns]
+        #self.std = self.std[sample.columns]
 
-        print(sample)
-
-        for i in range(len(mean.columns)):
-
-            # Calculate mean on the fly
-            if mean.iloc[:, i] == "auto":
-                automean = sample.iloc[:, i].mean()
-                sample.iloc[:, i] -= automean
-            # Use given mean
-            else:
-                sample.iloc[:, i] -= self.mean.at[0, i]
-
-            # Calculate std on the fly
-            if std.iloc[:, i] == "auto":
-                autostd = sample.iloc[:, i].std()
-                sample.iloc[:, i] /= autostd
-            # Use given std
-            else:
-                sample.iloc[:, i] /= self.std.at[0, i]
+        # Calculate current mean and std of the sample
+        automean = np.mean(sample.values, axis=0)
+        autostd = np.mean(sample.values, axis=0)
         
-        print(sample)
-                
+        # Replace values that dont correspond to "auto" with values from self stats
+        automean[self.cols_mean_i] = self.mean[self.cols_mean]
+        autostd[self.cols_std_i] = self.std[self.cols_std]
 
+        # Apply normalisation to sample
+        sample = (sample - automean) / autostd
 
         datapoint = {"sample": sample, "target": target}
         return datapoint
