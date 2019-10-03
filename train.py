@@ -11,7 +11,8 @@ from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as T
 from tqdm import tqdm
 
-from config import ConfigDataset, ConfigModel, ConfigOptimiser
+from config import ConfigDataset, ConfigOptimiser
+from models import ConfigModel
 import transforms as myT
 
 
@@ -121,7 +122,7 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum, log
         for batch in train_loader:
             sample = batch["sample"].to(device)
             # Squeeze because crossentropy wants 1d target
-            target = batch["target"].long().squeeze().to(device) 
+            target = batch["target"].long().squeeze().to(device)
 
             optimiser.zero_grad()
             prediction = model(sample)
@@ -159,20 +160,20 @@ def train(model, train_loader, val_loader, epochs, batch_size, lr, momentum, log
         
         # Normalise by number of batches
         val_loss /= len(val_loader)
+            
+        # Print some info
+        train_acc = np.trace(train_conf) / np.sum(train_conf)
+        val_acc = np.trace(val_conf) / np.sum(val_conf)
+        print("Epoch: %d/%d. Train loss: %f, val loss: %f. " \
+            "Train acc: %f, val acc: %f."
+            %(epoch + 1, epochs, train_loss, val_loss, train_acc, val_acc))
 
         if log:
             # Log scalars on tensorboard
             logger.add_scalars("losses", {"train": train_loss, "val": val_loss},
                 epoch)
-            train_acc = np.trace(train_conf) / np.sum(train_conf)
-            val_acc = np.trace(val_conf) / np.sum(val_conf)
             logger.add_scalars("acc", {"train": train_acc, "val": val_acc},
                 epoch)
-            
-            # Print some info
-            print("Epoch: %d/%d. Train loss: %f, val loss: %f. " \
-                "Train acc: %f, val acc: %f."
-                %(epoch + 1, epochs, train_loss, val_loss, train_acc, val_acc))
     
     if log:
         # Convert confusion matrices to figures and log them
@@ -229,7 +230,8 @@ if __name__ == "__main__":
     batch_size = 32
     c = ConfigDataset(
         "EURUSD",
-        batch_size=batch_size, 
+        batch_size=batch_size,
+        n_workers=8, 
         transforms=transforms)
     dataset_len = len(c.dataset)
 
@@ -244,8 +246,8 @@ if __name__ == "__main__":
 
     # Config model
     model = ConfigModel(
-        "MLP",
-        input_features=len(in_feat) * 240, 
+        "SimpleCNN",
+        input_features=len(in_feat), 
         output_classes=2).model
 
     # Train model
@@ -257,4 +259,4 @@ if __name__ == "__main__":
         batch_size=batch_size,
         lr=0.001, 
         momentum=0.0,
-        log=False)
+        log=log)
